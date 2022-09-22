@@ -5,6 +5,7 @@ ARG DOWNLOADS=/usr/src/downloads
 FROM ${UBUNTU} AS ubuntu
 ARG DOWNLOADS
 ARG LINUX_FIRMWARE=linux-firmware=1.187.33
+# as seen on https://packages.ubuntu.com/focal-updates/linux-source-5.4.0
 ARG LINUX_SOURCE=linux-source-5.4.0=5.4.0-126.142
 ENV DEBIAN_FRONTEND=noninteractive
 RUN set -x \

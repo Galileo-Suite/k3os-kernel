@@ -1,0 +1,63 @@
+include:
+  - project: "galileo/shared-ci"
+    file: "global/variables.gitlab-ci.yml"
+
+stages:
+  - build
+  - release
+
+services:
+  - name: 781817666983.dkr.ecr.us-east-1.amazonaws.com/docker.io/docker:20.10.13-dind-alpine3.15
+
+
+build:
+  stage: build
+  image: rancher/dapper:v0.6.0
+  tags:
+    - large
+  before_script:
+    - until docker info; do sleep 1; done
+  script:
+    - |
+      apk add --no-cache curl
+      dapper ci
+      (cd dist/artifacts; sha256sum * > sha256sum-amd64.txt)
+      if [ "$CI_COMMIT_TAG" ]; then
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file dist/artifacts/kernel-headers-generic_amd64.tar.xz ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-headers-generic_amd64.tar.xz
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file dist/artifacts/kernel-generic_amd64.tar.xz         ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-generic_amd64.tar.xz
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file dist/artifacts/kernel-extra-generic_amd64.tar.xz   ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-extra-generic_amd64.tar.xz
+        curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file dist/artifacts/sha256sum-amd64.txt                 ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/sha256sum-amd64.txt
+      fi
+  timeout: 12 hours
+  artifacts:
+    paths:
+      - "dist/artifacts/*"
+    expire_in: 1 day
+  only:
+    refs:
+      - web
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG && $CI_PIPELINE_SOURCE == "web"
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - echo "Releasing $CI_COMMIT_TAG"
+  release:
+    name: '$CI_COMMIT_TAG'
+    tag_name: '$CI_COMMIT_TAG'
+    description: "k3os-kernel auto build"
+    assets:
+      links:
+        - name: 'kernel-headers-generic_amd64.tar.xz'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-headers-generic_amd64.tar.xz'
+        - name: 'kernel-generic_amd64.tar.xz'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-generic_amd64.tar.xz'
+        - name: 'kernel-extra-generic_amd64.tar.xz'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/kernel-extra-generic_amd64.tar.xz'
+        - name: 'sha256sum-amd64.txt'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${CI_COMMIT_TAG}/sha256sum-amd64.txt'
